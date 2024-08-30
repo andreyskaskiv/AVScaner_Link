@@ -11,7 +11,7 @@
 ## Install:
 ```pycon
 git clone 
-cd ...
+cd AVScaner_Link
 ```
 ```pycon
 1. Create a virtual environment:
