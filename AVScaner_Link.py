@@ -5,7 +5,7 @@ import urllib.parse
 from asyncio import Queue
 
 import aiohttp
-
+import ssl
 from handlers.file_handler import read_file_to_queue, read_file_to_list, write_to_file, load_patterns
 from handlers.parse_arguments import parse_arguments
 from handlers.user_agent import USER_AGENTS
@@ -23,6 +23,10 @@ VERBOSE = PARSE_ARGS.verbose
 URL_ENCODE = PARSE_ARGS.url_encode
 PROXY = PARSE_ARGS.proxy
 
+# WSL
+PATH_TO_CAFILE = '/etc/ssl/certs/ca-certificates.crt'
+SSL_CTX = ssl.create_default_context(cafile=PATH_TO_CAFILE)
+
 
 async def generate_payload_urls(link, payload_patterns):
     scheme = link.replace('https://', 'http://')
@@ -33,14 +37,14 @@ async def generate_payload_urls(link, payload_patterns):
 
 @limit_rate_decorator(calls_limit=CALL_LIMIT_PER_SECOND, timeout=1)
 async def make_request(url, session):
-    proxy = PROXY if PROXY else None
+    proxy_url= PROXY if PROXY else None
 
     user_agent = random.choice(USER_AGENTS)
     headers = {'User-Agent': user_agent}
 
     url = urllib.parse.quote(url, safe=':/?=&') if URL_ENCODE else url
     try:
-        async with session.get(url, headers=headers, proxy=proxy) as response:
+        async with session.get(url, headers=headers, proxy=proxy_url, ssl=SSL_CTX) as response:
             html = await response.text()
             return url, response.status, html
 
@@ -86,11 +90,16 @@ async def process_link(link, payload_patterns, answer_patterns, session):
     total_requests = len(tasks)
     completed_tasks = 0
 
+    spinner_index = 0
+    spinner = ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐼', '🐻', '🐨', '🐯',
+               '🦁', '🐮', '🐼', '🐸', '🦒', '🦔', '🐧', '🐦', '🐵', '🐔']
+
     for completed_task in asyncio.as_completed(tasks.keys()):
         url, status, html = await completed_task
 
         completed_tasks += 1
-        print(f"{C.norm}\r{completed_tasks}/{total_requests}{C.norm}  ", end='')
+        spinner_index = (spinner_index + 1) % len(spinner)  # Обновляем индекс анимации
+        print(f"{C.norm}\r{completed_tasks}/{total_requests}{C.norm} {spinner[spinner_index]}  ", end='')
 
         if status is not None and html is not None:
             await analyze_response(url, status, html, answer_patterns)

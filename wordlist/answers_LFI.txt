@@ -1,2 +1,4 @@
 root:x:0
 dir
+configure
+Apache
