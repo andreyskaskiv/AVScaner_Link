@@ -142,4 +142,9 @@ async def main():
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print(f"{C.red} [!] Program interrupted by user. Exiting...{C.norm}")
+    except Exception as e:
+        print(f"{C.red}[!] Unexpected error: {e}{C.norm}")
