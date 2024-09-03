@@ -1,11 +1,16 @@
 import asyncio
 import os
 import random
-import urllib.parse
+import re
+import ssl
 from asyncio import Queue
+from typing import Tuple, Optional, Union
 
 import aiohttp
-import ssl
+import chardet
+from aiohttp import ClientConnectorCertificateError, ClientSSLError
+from aiohttp import ClientSession
+
 from handlers.file_handler import read_file_to_queue, read_file_to_list, write_to_file, load_patterns
 from handlers.parse_arguments import parse_arguments
 from handlers.user_agent import USER_AGENTS
@@ -23,12 +28,8 @@ VERBOSE = PARSE_ARGS.verbose
 URL_ENCODE = PARSE_ARGS.url_encode
 PROXY = PARSE_ARGS.proxy
 
-# WSL
-PATH_TO_CAFILE = '/etc/ssl/certs/ca-certificates.crt'
-SSL_CTX = ssl.create_default_context(cafile=PATH_TO_CAFILE)
 
-
-async def generate_payload_urls(link, payload_patterns):
+async def generate_payload_urls(link: str, payload_patterns: list[str]):
     scheme = link.replace('https://', 'http://')
     base_url = scheme.split('=')[0]
     links = [f"{base_url}={payload}" for payload in payload_patterns]
@@ -36,24 +37,40 @@ async def generate_payload_urls(link, payload_patterns):
 
 
 @limit_rate_decorator(calls_limit=CALL_LIMIT_PER_SECOND, timeout=1)
-async def make_request(url, session):
-    proxy_url= PROXY if PROXY else None
-
+async def make_request(url: str, session: ClientSession) -> Tuple[str, Optional[Union[int, None]], Optional[str]]:
+    proxy_url = PROXY if PROXY else None
     user_agent = random.choice(USER_AGENTS)
     headers = {'User-Agent': user_agent}
 
-    url = urllib.parse.quote(url, safe=':/?=&') if URL_ENCODE else url
+    scheme = url.replace('https://', 'http://')
+
     try:
-        async with session.get(url, headers=headers, proxy=proxy_url, ssl=SSL_CTX) as response:
-            html = await response.text()
-            return url, response.status, html
+        async with session.get(scheme, headers=headers, proxy=proxy_url, ssl=False) as response:
+            try:
+                raw_data = await response.read()
+                detected_encoding = chardet.detect(raw_data)['encoding']
+                html = raw_data.decode(detected_encoding,
+                                       errors="ignore")
+                return url, response.status, html
+
+            except aiohttp.ClientPayloadError as e:
+                print(f'{C.yellow}\n[!] Warning in make_request for {url}: {e}. Some data may be missing.{C.norm}')
+                return url, response.status, None
+
+    except (ClientConnectorCertificateError, ClientSSLError) as ssl_error:
+        print(f'{C.red}[!] SSL Error in make_request for {url}: {ssl_error}{C.norm}')
+        return url, None, None
+
+    except aiohttp.ClientError as e:
+        print(f'{C.red}[!] HTTP Client Error in make_request for {url}: {e}{C.norm}')
+        return url, None, None
 
     except Exception as e:
-        print(f'{C.red}[!] Error in make_request for {url}: {e}{C.norm}')
+        print(f'{C.red}[!] Unexpected Error in make_request for {url} {e}{C.norm}')
         return url, None, None
 
 
-async def analyze_response(url, status, html, answer_patterns):
+async def analyze_response(url: str, status: int, html: str, answer_patterns: re.Pattern):
     output_folder = OUTPUT
     os.makedirs(output_folder, exist_ok=True)
 
@@ -82,7 +99,7 @@ async def analyze_response(url, status, html, answer_patterns):
         print(f'{C.norm}[-] URL: {url} | Status: {status} {C.norm}')
 
 
-async def process_link(link, payload_patterns, answer_patterns, session):
+async def process_link(link: str, payload_patterns: list[str], answer_patterns: re.Pattern, session: ClientSession):
     urls_with_payload = await generate_payload_urls(link, payload_patterns)
 
     tasks = {make_request(url, session): url for url in urls_with_payload}
@@ -105,7 +122,7 @@ async def process_link(link, payload_patterns, answer_patterns, session):
             await analyze_response(url, status, html, answer_patterns)
 
 
-async def handle_queue(link_queue: Queue, payload_patterns: list[str], answer_patterns, session):
+async def handle_queue(link_queue: Queue, payload_patterns: list[str], answer_patterns: re.Pattern, session: ClientSession):
     while True:
         link = await link_queue.get()
 
@@ -115,6 +132,16 @@ async def handle_queue(link_queue: Queue, payload_patterns: list[str], answer_pa
             print(f'{C.red}[!] Error in handle_queue: {e}{C.norm}')
         finally:
             link_queue.task_done()
+
+
+async def cancel_tasks(tasks: list[asyncio.Task]):
+    for task in tasks:
+        if not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
 
 @timer_decorator
@@ -127,7 +154,11 @@ async def main():
     producer = asyncio.create_task(read_file_to_queue(INPUT, link_queue))
 
     timeout_for_all_requests = aiohttp.ClientTimeout(total=TIMEOUT)
-    async with aiohttp.ClientSession(timeout=timeout_for_all_requests) as session:
+    async with (aiohttp.ClientSession(
+                                    connector=aiohttp.TCPConnector(limit=100, ssl=False, keepalive_timeout=30),
+                                    timeout=timeout_for_all_requests)
+                                    as session):
+
         consumers = [asyncio.create_task(handle_queue(link_queue=link_queue,
                                                       payload_patterns=payload_patterns,
                                                       answer_patterns=answer_patterns,
@@ -136,8 +167,7 @@ async def main():
         await asyncio.gather(producer)
         await link_queue.join()
 
-        for consumer in consumers:
-            consumer.cancel()
+        await cancel_tasks(consumers)
         await asyncio.gather(*consumers, return_exceptions=True)
 
 
