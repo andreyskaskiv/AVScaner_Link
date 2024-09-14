@@ -63,20 +63,15 @@ async def create_request_tasks(urls_with_payload: list[str], session):
 
 async def process_link(link: str, payload_patterns: list[str], answer_patterns: re.Pattern, session: ClientSession):
     urls_with_payload = await generate_payload_urls(link, payload_patterns)
-    total_urls = len(urls_with_payload)
 
-    index = 0
-    while index < total_urls:
-        batch_urls = urls_with_payload[index:index + CALL_LIMIT_PER_SECOND]
-        tasks = await create_request_tasks(batch_urls, session)
-        print(f"{len(tasks)} {datetime.datetime.now()}")
+    tasks = await create_request_tasks(urls_with_payload, session)
+    print(f"{len(tasks)} {datetime.datetime.now()}")
 
-        # Ждём завершения только CALL_LIMIT_PER_SECOND тасков
-        for completed_task in asyncio.as_completed(tasks.keys()):
-            url, result = await completed_task
-            print(f'{C.green}[-] <== complete perform: {url}{C.norm}')
+    for completed_task in asyncio.as_completed(tasks.keys()):
+        url, result = await completed_task
+        print(f'{C.green}[-] <== complete perform: {url}{C.norm}')
 
-        index += CALL_LIMIT_PER_SECOND
+
 
 
 async def handle_queue(link_queue: Queue, payload_patterns: list[str], answer_patterns: re.Pattern, session: ClientSession):
