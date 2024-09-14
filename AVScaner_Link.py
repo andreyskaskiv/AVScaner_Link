@@ -1,8 +1,10 @@
 import asyncio
+import datetime
 import os
 import random
 import re
 import ssl
+import time
 from asyncio import Queue
 from typing import Tuple, Optional, Union
 
@@ -45,10 +47,10 @@ async def make_request(url: str, session: ClientSession) -> Tuple[str, Optional[
     scheme = url.replace('https://', 'http://')
 
     print(f'{C.blue}[+] ==> start perform: {url}{C.norm}')
-    await asyncio.sleep(random.randint(2, 10))
-    print(f'{C.green}[-] <== complete perform: {url}{C.norm}')
-    return url, "response data"
+    # await asyncio.sleep(random.randint(2, 10))
+    await asyncio.sleep(5)
 
+    return url, "response data"
 
 async def create_request_tasks(urls_with_payload: list[str], session):
     tasks = {}
@@ -67,10 +69,12 @@ async def process_link(link: str, payload_patterns: list[str], answer_patterns: 
     while index < total_urls:
         batch_urls = urls_with_payload[index:index + CALL_LIMIT_PER_SECOND]
         tasks = await create_request_tasks(batch_urls, session)
+        print(f"{len(tasks)} {datetime.datetime.now()}")
 
         # Ждём завершения только CALL_LIMIT_PER_SECOND тасков
         for completed_task in asyncio.as_completed(tasks.keys()):
             url, result = await completed_task
+            print(f'{C.green}[-] <== complete perform: {url}{C.norm}')
 
         index += CALL_LIMIT_PER_SECOND
 
