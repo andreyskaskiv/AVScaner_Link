@@ -5,6 +5,7 @@ from typing import Optional
 import aiofiles
 import re
 
+from handlers.file_handler import FileHandler
 from handlers.parse_arguments import parse_arguments
 from handlers.utils import C
 
@@ -14,7 +15,7 @@ INPUT = "input_data/crawled_final.txt"
 OUTPUT = PARSE_ARGS.output
 PAYLOADS = "wordlist/payloads_LFI.txt"
 ANSWERS = "wordlist/answers_LFI.txt"
-CALL_LIMIT_PER_SECOND = 3
+CALL_LIMIT_PER_SECOND = 5
 TIMEOUT = 15
 VERBOSE = None
 URL_ENCODE = None
@@ -31,27 +32,7 @@ class Task:
         print(f'{C.green}   [-] <== complete perform: {self.url}, _time={_time}{C.norm}')
 
 
-class FileHandler:
-    def __init__(self):
-        self.payloads = []
-        self.combined_pattern = None
 
-    async def read_file_to_queue(self, file_path: str, queue: asyncio.Queue):
-        async with aiofiles.open(file_path, mode='r') as file:
-            async for line in file:
-                await queue.put(line.strip())
-
-    async def read_file_to_list(self, file_path: str):
-        async with aiofiles.open(file_path, mode='r') as file:
-            async for line in file:
-                self.payloads.append(line.strip())
-        print(f'{C.yellow}[*] Total number of payload variants per link: {C.bold_yellow}{len(self.payloads)}\n\n{C.norm}')
-
-    async def load_patterns(self, file_path: str):
-        async with aiofiles.open(file_path, mode='r') as file:
-            patterns = [line.strip() for line in await file.readlines()]
-
-        self.combined_pattern = re.compile('|'.join(re.escape(pattern) for pattern in patterns))
 
 
 class Pool:
