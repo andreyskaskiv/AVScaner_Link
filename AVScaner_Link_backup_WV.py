@@ -25,33 +25,11 @@ class Task:
     url: str
 
     async def perform(self, pool):
-        _time = 2
+        # _time = random.randint(3, 5)
+        _time = 5
         print(f'{C.blue}[+] ==> start perform: {self.url}, _time={_time}{C.norm}')
         await asyncio.sleep(_time)
         print(f'{C.green}   [-] <== complete perform: {self.url}, _time={_time}{C.norm}')
-
-
-class FileHandler:
-    def __init__(self):
-        self.payloads = []
-        self.combined_pattern = None
-
-    async def read_file_to_queue(self, file_path: str, queue: asyncio.Queue):
-        async with aiofiles.open(file_path, mode='r') as file:
-            async for line in file:
-                await queue.put(line.strip())
-
-    async def read_file_to_list(self, file_path: str):
-        async with aiofiles.open(file_path, mode='r') as file:
-            async for line in file:
-                self.payloads.append(line.strip())
-        print(f'{C.yellow}[*] Total number of payload variants per link: {C.bold_yellow}{len(self.payloads)}\n\n{C.norm}')
-
-    async def load_patterns(self, file_path: str):
-        async with aiofiles.open(file_path, mode='r') as file:
-            patterns = [line.strip() for line in await file.readlines()]
-
-        self.combined_pattern = re.compile('|'.join(re.escape(pattern) for pattern in patterns))
 
 
 class Pool:
@@ -68,7 +46,8 @@ class Pool:
         self._cuncurrent_workers = 0
         self._stop_event = asyncio.Event()
 
-        self.file_handler = FileHandler()
+        self.payloads = []
+        self.combined_pattern = None
 
     async def _worker(self, task: Task):
         async with self._sem:
@@ -76,7 +55,7 @@ class Pool:
 
             await task.perform(self)
 
-            self._payloadUrls_queue.task_done()
+            self._payloadUrls_queue.task_done()  # это означает, что задачу мы выполнили
         self._cuncurrent_workers -= 1
         if not self.is_running and self._cuncurrent_workers == 0:
             self._stop_event.set()
@@ -92,7 +71,7 @@ class Pool:
     async def _scheduler_link_queue(self):
         while self.is_running:
             link = await self._link_queue.get()
-            await self.generate_payload_urls(link, self.file_handler.payloads)
+            await self.generate_payload_urls(link, self.payloads)
             self._link_queue.task_done()
 
     def start(self):
@@ -123,11 +102,28 @@ class Pool:
         for payload in payload_patterns:
             await self._payloadUrls_queue.put(f"{base_url}={payload}")
 
+    async def read_file_to_queue(self, file_path: str):
+        async with aiofiles.open(file_path, mode='r') as file:
+            async for line in file:
+                await self._link_queue.put(line.strip())
+
+    async def read_file_to_list(self, file_path: str):
+        async with aiofiles.open(file_path, mode='r') as file:
+            async for line in file:
+                self.payloads.append(line.strip())
+        print(f'{C.yellow}[*] Total number of payload variants per link: {C.bold_yellow}{len(self.payloads)}\n\n{C.norm}')
+
+    async def load_patterns(self, file_path):
+        async with aiofiles.open(file_path, mode='r') as file:
+            patterns = [line.strip() for line in await file.readlines()]
+
+        self.combined_pattern = re.compile('|'.join(re.escape(pattern) for pattern in patterns))
+
 
 async def start(pool):
-    await pool.file_handler.read_file_to_queue(INPUT, pool._link_queue)
-    await pool.file_handler.read_file_to_list(PAYLOADS)
-    await pool.file_handler.load_patterns(ANSWERS)
+    await pool.read_file_to_queue(INPUT)
+    await pool.read_file_to_list(PAYLOADS)
+    await pool.load_patterns(ANSWERS)
 
     pool.start()
 
@@ -137,7 +133,9 @@ async def start(pool):
 
 
 def main():
+    # Создаем новый цикл событий
     loop = asyncio.new_event_loop()
+    # Устанавливаем его как текущий цикл
     asyncio.set_event_loop(loop)
     pool = Pool(CALL_LIMIT_PER_SECOND)
 
