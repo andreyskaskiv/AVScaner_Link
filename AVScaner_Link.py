@@ -1,10 +1,9 @@
 import asyncio
-from dataclasses import dataclass
 from typing import Optional
 
 from handlers.file_handler import FileHandler
 from handlers.parse_arguments import parse_arguments
-from handlers.utils import C
+from task import Task
 
 PARSE_ARGS = parse_arguments()
 
@@ -17,19 +16,6 @@ TIMEOUT = 15
 VERBOSE = None
 URL_ENCODE = None
 PROXY = PARSE_ARGS.proxy
-
-@dataclass
-class Task:
-    url: str
-
-    async def perform(self, pool):
-        _time = 2
-        print(f'{C.blue}[+] ==> start perform: {self.url}, _time={_time}{C.norm}')
-        await asyncio.sleep(_time)
-        print(f'{C.green}   [-] <== complete perform: {self.url}, _time={_time}{C.norm}')
-
-
-
 
 
 class Pool:

@@ -29,6 +29,7 @@ class FileHandler:
 
         self.combined_pattern = re.compile('|'.join(re.escape(pattern) for pattern in patterns))
 
-async def write_to_file(message: str, file_path: str):
-    async with aiofiles.open(file_path, mode='a') as f:
-        await f.write(message + '\n')
+    @staticmethod
+    async def write_to_file(message: str, file_path: str):
+        async with aiofiles.open(file_path, mode='a') as f:
+            await f.write(message + '\n')
