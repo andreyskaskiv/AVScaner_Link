@@ -5,24 +5,15 @@ from handlers.file_handler import FileHandler
 from handlers.parse_arguments import parse_arguments
 from task import Task
 
-PARSE_ARGS = parse_arguments()
-
-INPUT = "input_data/crawled_final.txt"
-OUTPUT = PARSE_ARGS.output
-PAYLOADS = "wordlist/payloads_LFI.txt"
-ANSWERS = "wordlist/answers_LFI.txt"
-CALL_LIMIT_PER_SECOND = 20
-TIMEOUT = 15
-VERBOSE = None
-URL_ENCODE = None
-PROXY = PARSE_ARGS.proxy
-
 
 class Pool:
-    def __init__(self, max_rate: int, interval: int = 1, concurrent_level: Optional[int] = None):
+    def __init__(self, max_rate: int, interval: int = 1, concurrent_level: Optional[int] = None,
+                 task_factory=None):
+
         self.max_rate = max_rate
         self.interval = interval
         self.concurrent_level = concurrent_level
+
         self.is_running = False
         self._link_queue = asyncio.Queue(maxsize=100)
         self._payloadUrls_queue = asyncio.Queue(maxsize=100)
@@ -33,6 +24,8 @@ class Pool:
         self._stop_event = asyncio.Event()
 
         self.file_handler = FileHandler()
+
+        self.task_factory = task_factory
 
     async def _worker(self, task: Task):
         async with self._sem:
@@ -50,7 +43,8 @@ class Pool:
             for _ in range(self.max_rate):
                 async with self._sem:
                     url = await self._payloadUrls_queue.get()
-                    asyncio.create_task(self._worker(Task(url)))
+                    task = self.task_factory(url)
+                    asyncio.create_task(self._worker(task))
             await asyncio.sleep(self.interval)
 
     async def _scheduler_link_queue(self):
@@ -85,10 +79,10 @@ class Pool:
             await self._payloadUrls_queue.put(f"{base_url}={payload}")
 
 
-async def start(pool):
-    await pool.file_handler.read_file_to_queue(INPUT, pool._link_queue)
-    await pool.file_handler.read_file_to_list(PAYLOADS)
-    await pool.file_handler.load_patterns(ANSWERS)
+async def start(pool, input_file, payloads_file, answers_file):
+    await pool.file_handler.read_file_to_queue(input_file, pool._link_queue)
+    await pool.file_handler.read_file_to_list(payloads_file)
+    await pool.file_handler.load_patterns(answers_file)
 
     pool.start()
 
@@ -97,13 +91,31 @@ async def start(pool):
     await pool.stop()
 
 
-def main():
+def task_factory(output_file, timeout, verbose, url_encode, proxy):
+    def create_task(url):
+        return Task(
+            url=url,
+            output_file=output_file,
+            timeout=timeout,
+            verbose=verbose,
+            url_encode=url_encode,
+            proxy=proxy
+        )
+
+    return create_task
+
+
+def main(input_file, output_file, payloads_file, answers_file, call_limit_per_second, timeout, verbose, url_encode,
+         proxy):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    pool = Pool(CALL_LIMIT_PER_SECOND)
+
+    create_task = task_factory(output_file, timeout, verbose, url_encode, proxy)
+
+    pool = Pool(max_rate=call_limit_per_second, task_factory=create_task)
 
     try:
-        loop.run_until_complete(start(pool))
+        loop.run_until_complete(start(pool, input_file, payloads_file, answers_file))
     except KeyboardInterrupt:
         loop.run_until_complete(pool.stop())
     finally:
@@ -111,4 +123,16 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    PARSE_ARGS = parse_arguments()
+
+    main(
+        input_file=PARSE_ARGS.input,
+        output_file=PARSE_ARGS.output,
+        payloads_file=PARSE_ARGS.payloads,
+        answers_file=PARSE_ARGS.answers,
+        call_limit_per_second=PARSE_ARGS.concurrency,
+        timeout=PARSE_ARGS.timeout,
+        verbose=PARSE_ARGS.verbose,
+        url_encode=PARSE_ARGS.url_encode,
+        proxy=PARSE_ARGS.proxy,
+    )
