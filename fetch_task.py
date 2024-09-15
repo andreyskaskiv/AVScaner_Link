@@ -16,11 +16,10 @@ class Task:
     url: str
     output_file: str
     timeout: int
-    verbose: str
-    url_encode: bool
+    verbose: bool
     proxy: Optional[str]
 
-    async def make_request(self, pool):
+    async def make_request(self) -> tuple[str, Optional[int], Optional[str]]:
         timeout_for_all_requests = aiohttp.ClientTimeout(total=self.timeout)
         async with (aiohttp.ClientSession(
                 connector=aiohttp.TCPConnector(limit=100, ssl=False, keepalive_timeout=30),
@@ -58,7 +57,7 @@ class Task:
                 print(f'{C.red}[!] Unexpected Error in make_request for {self.url} {e}{C.norm}')
                 return self.url, None, None
 
-    async def analyze_response(self, url: str, status: int, html: str, pool):
+    async def analyze_response(self, url: str, status: int, html: str, pool) -> None:
         output_folder = self.output_file
         os.makedirs(output_folder, exist_ok=True)
 
@@ -86,8 +85,8 @@ class Task:
         elif self.verbose == 'v':
             print(f'{C.norm}[-] URL: {url} | Status: {status} {C.norm}')
 
-    async def perform(self, pool):
-        url, status, html = await self.make_request(pool)
+    async def perform(self, pool) -> None:
+        url, status, html = await self.make_request()
 
         if status is not None and html is not None:
             await self.analyze_response(url, status, html, pool)

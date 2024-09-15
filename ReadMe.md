@@ -54,7 +54,7 @@ cat crawled_link.txt | grep -vE "\.js(\?|$)" | p1radup | grep -Eo "(http|https):
 "-c", "--concurrency", help="Number of concurrent requests per sec", default=20)
 "-t", "--timeout", help="Request timeout", default=15 sec)
 "-v", "--verbose", help="Display all responses", default=None)
-"-e", "--url_encode", help="Proper URL encoding", default=None)
+"-e", "--payloads_encode", help="Proper URL encoding", default=None)
 "-px", "--proxy", help="Proxy for intercepting requests (e.g., http://127.0.0.1:8080)"
 ```
 ```pycon
