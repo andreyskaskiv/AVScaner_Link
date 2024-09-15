@@ -1,9 +1,6 @@
 import asyncio
-import random
 from dataclasses import dataclass
 from typing import Optional
-import aiofiles
-import re
 
 from handlers.file_handler import FileHandler
 from handlers.parse_arguments import parse_arguments
@@ -15,7 +12,7 @@ INPUT = "input_data/crawled_final.txt"
 OUTPUT = PARSE_ARGS.output
 PAYLOADS = "wordlist/payloads_LFI.txt"
 ANSWERS = "wordlist/answers_LFI.txt"
-CALL_LIMIT_PER_SECOND = 5
+CALL_LIMIT_PER_SECOND = 20
 TIMEOUT = 15
 VERBOSE = None
 URL_ENCODE = None
@@ -81,10 +78,10 @@ class Pool:
         self._scheduler_task_link_queue = asyncio.create_task(self._scheduler_link_queue())
         self._scheduler_task_payloadUrls_queue = asyncio.create_task(self._scheduler_payloadUrls_queue())
 
-    async def join(self):
+    async def join_link_queue(self):
         await self._link_queue.join()
 
-    async def join_urls_with_payload(self):
+    async def join_payloadUrls_queue(self):
         await self._payloadUrls_queue.join()
 
     async def stop(self):
@@ -93,9 +90,6 @@ class Pool:
         self._scheduler_task_payloadUrls_queue.cancel()
         if self._cuncurrent_workers != 0:
             await self._stop_event.wait()
-
-    async def put_urls_with_payload(self, task):
-        await self._payloadUrls_queue.put(task)
 
     async def generate_payload_urls(self, link: str, payload_patterns: list[str]):
         scheme = link.replace('https://', 'http://')
@@ -112,8 +106,8 @@ async def start(pool):
 
     pool.start()
 
-    await pool.join()
-    await pool.join_urls_with_payload()
+    await pool.join_link_queue()
+    await pool.join_payloadUrls_queue()
     await pool.stop()
 
 
