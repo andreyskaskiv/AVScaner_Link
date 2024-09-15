@@ -25,10 +25,11 @@ class Task:
     url: str
 
     async def perform(self, pool):
-        print(f'{C.blue}[+] ==> start perform: {self.url}{C.norm}')
-        _time = 2
+        _time = random.randint(1, 5)
+        print(f'{C.blue}[+] ==> start perform: {self.url}, _time={_time}{C.norm}')
+
         await asyncio.sleep(_time)
-        print(f'{C.green}[-] <== complete perform: {self.url}, _time={_time}{C.norm}')
+        print(f'{C.green}   [-] <== complete perform: {self.url}, _time={_time}{C.norm}')
 
 
 class Pool:
@@ -40,6 +41,7 @@ class Pool:
         self._queue = asyncio.Queue(maxsize=100)
         self._urls_with_payload_queue = asyncio.Queue(maxsize=100)
         self._scheduler_task: Optional[asyncio.Task] = None
+        self._scheduler_task_1: Optional[asyncio.Task] = None
         self._sem = asyncio.Semaphore(concurrent_level or max_rate)
         self._cuncurrent_workers = 0
         self._stop_event = asyncio.Event()
@@ -58,28 +60,22 @@ class Pool:
 
     async def _scheduler(self):
         while self.is_running:
-            link = await self._queue.get()
-            scheme = link.replace('https://', 'http://')
-            base_url = scheme.split('=')[0]
-
-            # Для каждого payload генерируем URL и добавляем в очередь
-            for payload in self.content_list:
-                await self._urls_with_payload_queue.put(f"{base_url}={payload}")
-
-            print(f'{C.blue}[*] Generated URLs with payloads added to queue.{C.norm}')
-
-            # await self.generate_payload_urls(link, self.content_list)
-
             for _ in range(self.max_rate):
                 async with self._sem:
                     url = await self._urls_with_payload_queue.get()
+                    # print(url)
                     asyncio.create_task(self._worker(Task(url)))
-
             await asyncio.sleep(self.interval)
+
+    async def _scheduler_1(self):
+        while self.is_running:
+            link = await self._queue.get()
+            await self.generate_payload_urls(link, self.content_list)
             self._queue.task_done()
 
     def start(self):
         self.is_running = True
+        self._scheduler_task_1 = asyncio.create_task(self._scheduler_1())
         self._scheduler_task = asyncio.create_task(self._scheduler())
 
     async def put(self, task):
@@ -93,6 +89,7 @@ class Pool:
 
     async def stop(self):
         self.is_running = False
+        self._scheduler_task_1.cancel()
         self._scheduler_task.cancel()
         if self._cuncurrent_workers != 0:
             await self._stop_event.wait()
@@ -100,13 +97,14 @@ class Pool:
     async def put_urls_with_payload(self, task):
         await self._urls_with_payload_queue.put(task)
 
+    async def generate_payload_urls(self, link: str, payload_patterns: list[str]):
+        scheme = link.replace('https://', 'http://')
+        base_url = scheme.split('=')[0]
 
-    # async def generate_payload_urls(self, link: str, payload_patterns: list[str]):
-    #     scheme = link.replace('https://', 'http://')
-    #     base_url = scheme.split('=')[0]
-    #
-    #     for payload in payload_patterns:
-    #         await self._urls_with_payload_queue.put(f"{base_url}={payload}")
+        for payload in payload_patterns:
+            await self._urls_with_payload_queue.put(f"{base_url}={payload}")
+            # print(f"{self._urls_with_payload_queue.qsize()} {payload}")
+        # print(f"{self._urls_with_payload_queue}")
 
     async def read_file_to_queue(self, file_path: str):
         async with aiofiles.open(file_path, mode='r') as file:
@@ -131,7 +129,6 @@ async def start(pool):
     await pool.read_file_to_list(PAYLOADS)
     await pool.load_patterns(ANSWERS)
 
-    # print(pool._urls_with_payload_queue)
 
     pool.start()
     await pool.join()
