@@ -16,7 +16,6 @@ class Pool:
         self.interval = interval
         self.concurrent_level = concurrent_level
         self.payloads_encode = payloads_encode
-
         self.is_running = False
         self._link_queue = asyncio.Queue(maxsize=100)
         self._payloadUrls_queue = asyncio.Queue(maxsize=100)
@@ -25,30 +24,53 @@ class Pool:
         self._sem = asyncio.Semaphore(concurrent_level or max_rate)
         self._cuncurrent_workers = 0
         self._stop_event = asyncio.Event()
-
         self.file_handler = FileHandler()
-
         self.task_factory = task_factory
+        self.detected = []
 
     async def _worker(self, task: Task) -> None:
         async with self._sem:
             self._cuncurrent_workers += 1
 
-            await task.perform(self)
+            url_detected = await task.perform(self)
+            if url_detected is None:
+                self._payloadUrls_queue.task_done()
+                self._cuncurrent_workers -= 1
+                return
 
+            base_url = url_detected.split('=')[0]
+            if base_url in self.detected:
+                self._payloadUrls_queue.task_done()
+                self._cuncurrent_workers -= 1
+                return
+
+            self.detected.append(base_url)
             self._payloadUrls_queue.task_done()
         self._cuncurrent_workers -= 1
+
         if not self.is_running and self._cuncurrent_workers == 0:
             self._stop_event.set()
 
     async def _scheduler_payloadUrls_queue(self) -> None:
         while self.is_running:
+            tasks_created = False
+
             for _ in range(self.max_rate):
                 async with self._sem:
                     url = await self._payloadUrls_queue.get()
+                    base_url = url.split('=')[0]
+
+                    if base_url in self.detected:
+                        self._payloadUrls_queue.task_done()
+                        continue
+
                     task = self.task_factory(url)
-                    asyncio.create_task(self._worker(task))
-            await asyncio.sleep(self.interval)
+                    if task:
+                        asyncio.create_task(self._worker(task))
+                        tasks_created = True
+
+            if tasks_created:
+                await asyncio.sleep(self.interval)
 
     async def _scheduler_link_queue(self) -> None:
         while self.is_running:
